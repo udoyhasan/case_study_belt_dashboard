@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # Conveyor Dashboard & AI Fault Detector
+  conveyor:
+    build: .
+    container_name: conveyor_dashboard
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MQTT_HOST=${MQTT_HOST:-mosquitto}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+    depends_on:
+      - mosquitto
+
+  # Mosquitto MQTT Broker (allows ESP32 to publish directly to VPS on port 1883)
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: conveyor_mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    command: >
+      sh -c 'mkdir -p /mosquitto/config &&
+             printf "listener 1883\nallow_anonymous true\n" > /mosquitto/config/mosquitto.conf &&
+             /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'
