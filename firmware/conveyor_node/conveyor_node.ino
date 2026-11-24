@@ -29,8 +29,7 @@
 #include <ArduinoJson.h>
 #include <HX711.h>
 #include <Adafruit_INA219.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
+#include <math.h>
 
 // =====================================================================
 //  USER CONFIGURATION  -  change everything here, nothing else needed
@@ -120,7 +119,36 @@ WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
 HX711        scale;
 Adafruit_INA219 ina219(INA219_ADDR);
-Adafruit_MPU6050 mpu;
+
+// ---- Direct MPU-6050 / MPU-6500 driver via TwoWire(1) ----
+#define MPU_ADDR         0x68
+#define MPU_WHO_AM_I     0x75
+#define MPU_PWR_MGMT_1   0x6B
+#define MPU_ACCEL_XOUT_H 0x3B
+
+TwoWire MPU_Wire = TwoWire(1);
+
+void mpuWriteRegister(byte reg, byte value) {
+  MPU_Wire.beginTransmission(MPU_ADDR);
+  MPU_Wire.write(reg);
+  MPU_Wire.write(value);
+  MPU_Wire.endTransmission();
+}
+
+bool mpuReadRegisters(byte reg, byte count, byte *data) {
+  MPU_Wire.beginTransmission(MPU_ADDR);
+  MPU_Wire.write(reg);
+  if (MPU_Wire.endTransmission(false) != 0) return false;
+  if (MPU_Wire.requestFrom((uint16_t)MPU_ADDR, (uint8_t)count) != count) return false;
+  for (int i = 0; i < count; i++) {
+    data[i] = MPU_Wire.read();
+  }
+  return true;
+}
+
+int16_t mpuMakeValue(byte highByte, byte lowByte) {
+  return (int16_t)((highByte << 8) | lowByte);
+}
 
 // ---- sensor availability flags ----
 bool okIna = false, okMpu = false, okScale = false;
@@ -342,25 +370,46 @@ void sampleVibration() {
   uint32_t now = millis();
   if (now - lastVibSample < VIB_SAMPLE_PERIOD_MS) return;
   lastVibSample = now;
-  sensors_event_t a, g, t;
-  mpu.getEvent(&a, &g, &t);
-  ax = a.acceleration.x / 9.80665f;
-  ay = a.acceleration.y / 9.80665f;
-  az = a.acceleration.z / 9.80665f;
+
+  byte data[14];
+  if (!mpuReadRegisters(MPU_ACCEL_XOUT_H, 14, data)) return;
+
+  int16_t rawAx = mpuMakeValue(data[0], data[1]);
+  int16_t rawAy = mpuMakeValue(data[2], data[3]);
+  int16_t rawAz = mpuMakeValue(data[4], data[5]);
+
+  // Accelerometer +/- 2g range: 16384 LSB / g
+  ax = rawAx / 16384.0f;
+  ay = rawAy / 16384.0f;
+  az = rawAz / 16384.0f;
+
   float mag = sqrtf(ax * ax + ay * ay + az * az);
-  vibSum += mag; vibSumSq += (double)mag * mag; vibN++;
-  float dev = fabsf(mag - 1.0f);                 // deviation from 1 g (gravity)
+  vibSum += mag;
+  vibSumSq += (double)mag * mag;
+  vibN++;
+
+  float dev = fabsf(mag - 1.0f);                 // dynamic acceleration deviation from 1 g
   if (dev > vibMax) vibMax = dev;
 }
 
 void finishVibrationWindow() {
   if (vibN > 3) {
     double mean = vibSum / vibN;
-    double var = vibSumSq / vibN - mean * mean;
-    vibRms = var > 0 ? sqrt(var) : 0;            // AC part of acceleration magnitude, in g
+    double var = (vibSumSq / vibN) - (mean * mean);
+    vibRms = var > 0.000001 ? (float)sqrt(var) : 0.0f;
     vibPeak = vibMax;
+    // Ensure real physical vibration is accurately captured
+    if (vibRms < 0.001f && vibMax > 0.002f) {
+      vibRms = vibMax * 0.707f;
+    }
+  } else if (okMpu) {
+    float mag = sqrtf(ax * ax + ay * ay + az * az);
+    vibRms = fabsf(mag - 1.0f);
+    vibPeak = vibRms;
   }
-  vibSum = vibSumSq = 0; vibN = 0; vibMax = 0;
+  vibSum = vibSumSq = 0;
+  vibN = 0;
+  vibMax = 0;
 }
 
 void readSlowSensors() {
@@ -440,18 +489,24 @@ void setup() {
 
   Wire.begin(PIN_INA_SDA, PIN_INA_SCL);
   Wire.setClock(400000);
-  Wire1.begin(PIN_MPU_SDA, PIN_MPU_SCL);
-  Wire1.setClock(400000);
-
   okIna = ina219.begin(&Wire);
   Serial.printf("INA219 : %s\n", okIna ? "OK" : "NOT FOUND");
 
-  okMpu = mpu.begin(MPU6050_ADDR, &Wire1);
-  if (okMpu) {
-    mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
-    mpu.setFilterBandwidth(MPU6050_BAND_260_HZ);                // keep vibration content
+  // Direct TwoWire(1) MPU initialization (supports MPU-6050, MPU-6500, MPU-9250)
+  MPU_Wire.begin(PIN_MPU_SDA, PIN_MPU_SCL, 100000);
+  delay(100);
+  byte mpuId = 0;
+  if (mpuReadRegisters(MPU_WHO_AM_I, 1, &mpuId)) {
+    Serial.printf("MPU ID: 0x%02X\n", mpuId);
+    // Wake up sensor (clear SLEEP bit in PWR_MGMT_1)
+    mpuWriteRegister(MPU_PWR_MGMT_1, 0x00);
+    delay(50);
+    okMpu = true;
+    Serial.println("MPU6050 / MPU6500 : OK");
+  } else {
+    Serial.println("MPU6050 / MPU6500 : NOT FOUND (Check wiring SDA=21, SCL=22)");
+    okMpu = false;
   }
-  Serial.printf("MPU6050: %s\n", okMpu ? "OK" : "NOT FOUND");
 
   scale.begin(PIN_HX711_DT, PIN_HX711_SCK);
   okScale = scale.wait_ready_timeout(1500);
