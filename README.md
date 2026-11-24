@@ -1,6 +1,6 @@
-# Conveyor Belt Dashboard V2 (AI/ML Driven)
+# Conveyor Belt System (AI/ML Driven)
 
-Real-time conveyor monitoring, mimic visualization, and fault classification driven by the trained Random Forest (`rf_noisy`) machine learning pipeline and adaptive speed controller.
+Real-time conveyor monitoring, mimic visualization, and fault classification driven exclusively by the trained Random Forest (`rf_noisy`) machine learning pipeline and adaptive speed controller.
 
 ---
 
@@ -10,7 +10,7 @@ Real-time conveyor monitoring, mimic visualization, and fault classification dri
 - **Adaptive Control**: Auto-derating and alarm escalation when mechanical/electrical anomalies persist.
 - **Live SVG Mimic & Trends**: Real-time belt animation, sensor trends, power consumption, and fault logging over WebSockets.
 - **Diagnostic Console (`/manual`)**: Hidden test interface to inject pre-filled sensor anomalies and verify AI detection response.
-- **Production Service Deployment**: Ready-to-deploy systemd service for Raspberry Pi and LaunchAgent for macOS.
+- **Production Startup Service (`conveyor.service`)**: Ready-to-deploy systemd service for Raspberry Pi.
 
 ---
 
@@ -38,12 +38,12 @@ pip install -r requirements.txt
 ## Deploy as a Service (Start on Boot)
 
 ```bash
-# Automatically install and enable systemd service:
+# Automatically install and enable conveyor.service:
 sudo ./manage_service.sh install
 
 # Check service status:
-./manage_service.sh status
+sudo systemctl status conveyor.service
 
 # Live service logs:
-sudo journalctl -u conveyor-dashboard-v2.service -f
+sudo journalctl -u conveyor.service -f
 ```

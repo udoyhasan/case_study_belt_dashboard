@@ -1,0 +1,19 @@
+[Unit]
+Description=Conveyor Service (Random Forest rf_noisy)
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/conveyor
+Environment="PATH=/home/pi/conveyor/venv/bin:/usr/local/bin:/usr/bin"
+Environment="MPLCONFIGDIR=/tmp/matplotlib_conveyor"
+ExecStart=/home/pi/conveyor/venv/bin/uvicorn server:app --app-dir /home/pi/conveyor --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/conveyor.log
+StandardError=append:/var/log/conveyor_err.log
+
+[Install]
+WantedBy=multi-user.target

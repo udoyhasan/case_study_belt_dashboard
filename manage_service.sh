@@ -1,48 +1,47 @@
 #!/usr/bin/env bash
-# Deploy and manage Conveyor Dashboard V2 startup service
+# Deploy and manage Conveyor startup service (conveyor.service)
 # Automatically detects Linux (systemd) vs macOS (launchd)
 
 ACTION="${1:-status}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(cd "$DIR/../.." && pwd)"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    PLIST_NAME="com.conveyor.dashboard-v2.plist"
+    PLIST_NAME="com.conveyor.service.plist"
     DEST_DIR="$HOME/Library/LaunchAgents"
     PLIST_PATH="$DEST_DIR/$PLIST_NAME"
 
     case "$ACTION" in
         install|enable)
             mkdir -p "$DEST_DIR"
-            cp "$DIR/$PLIST_NAME" "$PLIST_PATH"
+            cp "$DIR/com.conveyor.dashboard-v2.plist" "$PLIST_PATH" 2>/dev/null || true
             launchctl unload "$PLIST_PATH" 2>/dev/null || true
             launchctl load "$PLIST_PATH"
-            echo "Installed and started macOS LaunchAgent: $PLIST_PATH"
+            echo "Installed and started macOS service: $PLIST_PATH"
             ;;
         start)
             launchctl load "$PLIST_PATH" 2>/dev/null || true
-            launchctl start com.conveyor.dashboard-v2
-            echo "Started service com.conveyor.dashboard-v2"
+            launchctl start com.conveyor.service
+            echo "Started service com.conveyor.service"
             ;;
         stop)
-            launchctl stop com.conveyor.dashboard-v2 2>/dev/null || true
-            echo "Stopped service com.conveyor.dashboard-v2"
+            launchctl stop com.conveyor.service 2>/dev/null || true
+            echo "Stopped service com.conveyor.service"
             ;;
         uninstall|disable)
             launchctl unload "$PLIST_PATH" 2>/dev/null || true
             rm -f "$PLIST_PATH"
-            echo "Uninstalled LaunchAgent: $PLIST_PATH"
+            echo "Uninstalled service: $PLIST_PATH"
             ;;
         status)
-            launchctl list | grep "com.conveyor.dashboard-v2" || echo "Service not running."
+            launchctl list | grep "com.conveyor" || echo "Service not running."
             ;;
         *)
             echo "Usage: $0 {install|start|stop|status|uninstall}"
             ;;
     esac
 else
-    # Linux (Raspberry Pi / Debian / Ubuntu)
-    SERVICE_FILE="conveyor-dashboard-v2.service"
+    # Linux (Raspberry Pi / Debian / Ubuntu systemd)
+    SERVICE_FILE="conveyor.service"
     case "$ACTION" in
         install|enable)
             sudo cp "$DIR/$SERVICE_FILE" /etc/systemd/system/
