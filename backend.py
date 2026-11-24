@@ -45,7 +45,10 @@ class Backend:
         self._csv = None
         self._csv_writer = None
 
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"dashboard-{os.getpid()}")
+        try:
+            self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"dashboard-{os.getpid()}")
+        except (AttributeError, TypeError):
+            self.client = mqtt.Client(client_id=f"dashboard-{os.getpid()}")
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
