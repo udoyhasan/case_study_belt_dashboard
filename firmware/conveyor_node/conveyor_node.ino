@@ -172,7 +172,23 @@ uint32_t lastRampMs = 0;
 String lastReason = "boot";
 
 // ---- buttons ----
-struct Button { int pin; bool stable; bool lastRead; uint32_t changedAt; };
+struct Button {
+  int pin;
+  bool stable;
+  bool lastRead;
+  uint32_t changedAt;
+
+  bool pressedEdge() {
+    bool raw = digitalRead(pin) == HIGH;
+    uint32_t now = millis();
+    if (raw != lastRead) { lastRead = raw; changedAt = now; }
+    if ((now - changedAt) > DEBOUNCE_MS && raw != stable) {
+      stable = raw;
+      return raw;                       // true only on the press edge
+    }
+    return false;
+  }
+};
 Button btnStart = {PIN_BTN_START, false, false, 0};
 Button btnEstop = {PIN_BTN_ESTOP, false, false, 0};
 
@@ -291,20 +307,9 @@ void startBelt(const char* why) {
 // ---------------------------------------------------------------------
 //  Buttons (active HIGH, debounced, edge on press)
 // ---------------------------------------------------------------------
-bool buttonPressedEdge(Button &b) {
-  bool raw = digitalRead(b.pin) == HIGH;
-  uint32_t now = millis();
-  if (raw != b.lastRead) { b.lastRead = raw; b.changedAt = now; }
-  if ((now - b.changedAt) > DEBOUNCE_MS && raw != b.stable) {
-    b.stable = raw;
-    return raw;                       // true only on the press edge
-  }
-  return false;
-}
-
 void handleButtons() {
-  if (buttonPressedEdge(btnEstop)) emergencyStop("emergency button");
-  if (buttonPressedEdge(btnStart)) startBelt("start button");
+  if (btnEstop.pressedEdge()) emergencyStop("emergency button");
+  if (btnStart.pressedEdge()) startBelt("start button");
 }
 
 // ---------------------------------------------------------------------
