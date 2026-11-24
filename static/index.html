@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conveyor line 1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="bar__id">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="8" cy="16" r="5"/><circle cx="24" cy="16" r="5"/><path d="M8 11h16M8 21h16"/></svg>
+      <div>
+        <h1>Conveyor line 1 <span style="background:#ea580c; color:#fff; font-size:11px; padding:2px 7px; border-radius:4px; font-weight:700; vertical-align:middle; margin-left:6px;">AI: rf_noisy</span></h1>
+        <p class="links">
+          <span class="link" id="lnk-broker"><i></i>Broker</span>
+          <span class="link" id="lnk-device"><i></i>ESP32</span>
+          <span class="mode" id="mode">Connecting</span>
+        </p>
+      </div>
+    </div>
+
+    <div class="bar__ctl" role="group" aria-label="Belt controls">
+      <div class="runbtns">
+        <button class="btn btn--go" id="btn-start" type="button">Start belt</button>
+        <button class="btn btn--stop" id="btn-stop" type="button">Stop belt</button>
+      </div>
+      <label class="speed">
+        <span>Target speed</span>
+        <input type="range" id="speed" min="5" max="100" step="5" value="60">
+        <output id="speed-out">60%</output>
+      </label>
+      <div class="switches">
+        <label class="sw"><input type="checkbox" id="sw-adapt"><span></span>Adapt speed to faults</label>
+        <label class="sw"><input type="checkbox" id="sw-load"><span></span>Slow down under heavy load</label>
+      </div>
+      <button class="btn btn--quiet" id="btn-tare" type="button" title="Set the current load cell reading as zero. Do this with the belt empty.">Zero the scale</button>
+    </div>
+  </header>
+
+  <div class="alarm" id="alarm" hidden role="alert">
+    <div class="alarm__text">
+      <strong id="alarm-title">Alarm</strong>
+      <span id="alarm-reason"></span>
+    </div>
+    <button class="btn btn--ack" id="btn-ack" type="button">Acknowledge</button>
+  </div>
+  <div class="notice" id="notice" hidden></div>
+
+  <main>
+    <section class="mimic" id="mimic" aria-label="Conveyor overview">
+      <div class="stage">
+      <svg class="mimic__svg" viewBox="0 0 1200 330" role="img" aria-label="Conveyor diagram with live readings">
+        <!-- frame -->
+        <g class="frame">
+          <path d="M140 204 L126 250 M1060 204 L1074 250 M560 228 L560 250 M640 228 L640 250"/>
+        </g>
+        <!-- motor attached to drive roller -->
+        <g class="motor" id="g-motor">
+          <rect x="22" y="140" width="70" height="60" rx="6"/>
+          <path d="M92 170 H118"/>
+          <path class="motor__fins" d="M34 148 V192 M46 148 V192 M58 148 V192 M70 148 V192"/>
+        </g>
+        <!-- belt -->
+        <path class="belt" d="M140 136 H1060 A34 34 0 0 1 1060 204 H140 A34 34 0 0 1 140 136 Z"/>
+        <path class="belt__surface" id="belt-surface" d="M140 136 H1060 A34 34 0 0 1 1060 204 H140 A34 34 0 0 1 140 136 Z"/>
+        <!-- rollers -->
+        <g class="roller"><circle cx="140" cy="170" r="28"/><g class="spokes"><path d="M140 146 V194 M116 170 H164"/></g></g>
+        <g class="roller"><circle cx="1060" cy="170" r="28"/><g class="spokes"><path d="M1060 146 V194 M1036 170 H1084"/></g></g>
+        <!-- idlers -->
+        <g class="idler"><circle cx="400" cy="170" r="10"/><circle cx="800" cy="170" r="10"/></g>
+        <!-- load cell platform -->
+        <g class="loadcell" id="g-load"><rect x="540" y="208" width="120" height="20" rx="3"/></g>
+        <!-- parcels -->
+        <g class="parcels" id="parcels">
+          <rect class="parcel" x="150" y="96" width="56" height="40" rx="3"/>
+          <rect class="parcel" x="150" y="104" width="44" height="32" rx="3"/>
+          <rect class="parcel" x="150" y="92" width="64" height="44" rx="3"/>
+        </g>
+        <!-- vibration sensor on frame -->
+        <g class="imu" id="g-vib"><rect x="1000" y="214" width="34" height="22" rx="3"/></g>
+        <!-- temperature probe on motor -->
+        <g class="probe" id="g-temp"><circle cx="57" cy="212" r="6"/><path d="M57 200 V206"/></g>
+        <!-- leaders from parts to readings -->
+        <g class="leader">
+          <path id="ld-current" d="M57 140 V70"/>
+          <path id="ld-temp" d="M57 218 V262"/>
+          <path id="ld-load" d="M600 228 V262"/>
+          <path id="ld-speed" d="M600 136 V70"/>
+          <path id="ld-vib" d="M1017 236 V262"/>
+        </g>
+      </svg>
+
+      <!-- readings pinned to their sensors (become a grid on narrow screens) -->
+      <div class="tags">
+        <div class="tag" id="tag-current" style="--x:4.75%; --y:2%">
+          <span class="tag__k">Motor current</span>
+          <span class="tag__v"><b id="v-current">–</b> mA</span>
+          <span class="tag__s" id="s-current">Expected –</span>
+        </div>
+        <div class="tag tag--mid" id="tag-speed" style="--x:50%; --y:2%">
+          <span class="tag__k">Belt speed</span>
+          <span class="tag__v"><b id="v-speed">–</b> %</span>
+          <span class="tag__s" id="s-speed">Step delay –</span>
+        </div>
+        <div class="tag tag--right tag--free" id="tag-power" style="--x:98%; --y:2%">
+          <span class="tag__k">Power</span>
+          <span class="tag__v"><b id="v-power">–</b> W</span>
+          <span class="tag__s" id="s-power">– V supply</span>
+        </div>
+        <div class="tag" id="tag-temp" style="--x:4.75%; --y:79%">
+          <span class="tag__k">Motor temperature</span>
+          <span class="tag__v"><b id="v-temp">–</b> °C</span>
+          <span class="tag__s" id="s-temp">Warning at –</span>
+        </div>
+        <div class="tag tag--mid" id="tag-load" style="--x:50%; --y:79%">
+          <span class="tag__k">Load on belt</span>
+          <span class="tag__v"><b id="v-load">–</b> g</span>
+          <span class="tag__s" id="s-load">Warning at –</span>
+        </div>
+        <div class="tag tag--right" id="tag-vib" style="--x:84.75%; --y:79%">
+          <span class="tag__k">Frame vibration</span>
+          <span class="tag__v"><b id="v-vib">–</b> g</span>
+          <span class="tag__s" id="s-vib">Limit –</span>
+        </div>
+      </div>
+      </div>
+      <p class="mimic__empty" id="empty">Waiting for the ESP32. Power it on, or run <code>python tools/simulate_esp32.py</code> to test without hardware.</p>
+    </section>
+
+    <div class="split">
+      <section class="trends" aria-label="Trends">
+        <div class="sec-h">
+          <h2>Trends</h2>
+          <div class="seg" role="radiogroup" aria-label="Time window" id="window">
+            <button type="button" data-s="60">1 min</button>
+            <button type="button" data-s="120" aria-checked="true">2 min</button>
+            <button type="button" data-s="300">5 min</button>
+            <button type="button" data-s="600">10 min</button>
+          </div>
+        </div>
+        <div class="charts" id="charts"></div>
+      </section>
+
+      <aside class="side">
+        <section aria-label="Active faults">
+          <div class="sec-h"><h2>Faults now</h2></div>
+          <ul class="faults" id="faults"></ul>
+        </section>
+        <section aria-label="Events">
+          <div class="sec-h"><h2>What the system did</h2></div>
+          <ol class="events" id="events"></ol>
+        </section>
+      </aside>
+    </div>
+
+    <section class="data" aria-label="Recent samples">
+      <div class="sec-h">
+        <h2>Recent samples</h2>
+        <div class="data__act">
+          <label class="sw sw--small"><input type="checkbox" id="sw-faults-only"><span></span>Only rows with a fault</label>
+          <a class="btn btn--quiet" href="/api/log.csv" download>Download full log (CSV)</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Time</th><th scope="col">Load (g)</th><th scope="col">Current (mA)</th><th scope="col">Expected (mA)</th>
+              <th scope="col">Power (W)</th><th scope="col">Vibration (g)</th><th scope="col">Temp (°C)</th>
+              <th scope="col">Speed (%)</th><th scope="col">Step delay (µs)</th><th scope="col">Belt</th><th scope="col">Fault</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

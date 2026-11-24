@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual Fault Injection — Conveyor Line 1 (ML V2)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151d30;
+      --border: #23314d;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --blue: #2563eb;
+      --orange: #ea580c;
+      --red: #dc2626;
+      --green: #10b981;
+      --amber: #d97706;
+      --purple: #8b5cf6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Barlow', -apple-system, sans-serif;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    .header {
+      max-width: 1200px;
+      margin: 0 auto 24px;
+      padding: 20px 24px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header h1 span.badge {
+      background: var(--orange);
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .header p {
+      color: var(--text-muted);
+      font-size: 13.5px;
+      margin-top: 4px;
+    }
+    .btn-main {
+      background: #1e293b;
+      color: #38bdf8;
+      border: 1px solid #38bdf8;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13.5px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-main:hover {
+      background: #38bdf8;
+      color: #0b0f19;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 900px) {
+      .container { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+    }
+    .card h2 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .grid-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .err-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #101726;
+      color: #f1f5f9;
+      cursor: pointer;
+      font-family: inherit;
+      text-align: left;
+      transition: all 0.2s ease;
+    }
+    .err-btn:hover {
+      border-color: #475569;
+      transform: translateY(-1px);
+    }
+    .err-btn.overload { border-left: 5px solid var(--red); }
+    .err-btn.overload:hover { background: #1e131d; border-color: var(--red); }
+    .err-btn.vibration { border-left: 5px solid var(--amber); }
+    .err-btn.vibration:hover { background: #1f1912; border-color: var(--amber); }
+    .err-btn.overheat { border-left: 5px solid #f43f5e; }
+    .err-btn.overheat:hover { background: #201116; border-color: #f43f5e; }
+    .err-btn.stall { border-left: 5px solid #a855f7; }
+    .err-btn.stall:hover { background: #1c1326; border-color: #a855f7; }
+    .err-btn.overspeed { border-left: 5px solid #3b82f6; }
+    .err-btn.overspeed:hover { background: #111a2e; border-color: #3b82f6; }
+    .err-btn.combo { border-left: 5px solid #ec4899; }
+    .err-btn.combo:hover { background: #22121e; border-color: #ec4899; }
+    .err-btn.normal { border-left: 5px solid var(--green); background: #0c1c1a; }
+    .err-btn.normal:hover { background: #0f2924; border-color: var(--green); }
+
+    .err-btn .title {
+      font-size: 15px;
+      font-weight: 700;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .err-btn .desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+    .err-btn .action-tag {
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: #1e293b;
+      white-space: nowrap;
+    }
+    .status-box {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      color: #94a3b8;
+      min-height: 220px;
+      overflow-y: auto;
+    }
+    .status-box .highlight {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .status-box .fault-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+    .status-box .tag-crit { background: #dc2626; color: #fff; }
+    .status-box .tag-warn { background: #d97706; color: #fff; }
+    .status-box .tag-ok { background: #10b981; color: #fff; }
+
+    .readings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .reading-chip {
+      background: #0e1626;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .reading-chip .k { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+    .reading-chip .v { font-size: 16px; font-weight: 700; color: #f8fafc; font-family: 'JetBrains Mono', monospace; }
+
+    .banner-alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .banner-alert.alarm { background: #7f1d1d; border: 1px solid #ef4444; color: #fee2e2; }
+    .banner-alert.ok { background: #064e3b; border: 1px solid #10b981; color: #d1fae5; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div>
+      <h1>
+        Conveyor Line 1 — Manual Fault Injection Console
+        <span class="badge">Model: rf_noisy</span>
+      </h1>
+      <p>Hidden diagnostic control panel. Clicking an error button pre-fills the sensor buffer with targeted anomaly data to test Random Forest inference and adaptive alarm escalation.</p>
+    </div>
+    <div>
+      <a class="btn-main" href="/" target="_blank">Open Live Dashboard ↗</a>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Left Column: Fault Injection Buttons -->
+    <div class="card">
+      <h2>Simulate & Inject Machine Faults</h2>
+      <div class="grid-btns">
+        <button class="err-btn overload" onclick="injectFault('overload')">
+          <div>
+            <span class="title">1. Belt Overload (Load Cell Spike)</span>
+            <span class="desc">Load = 1,450 g (limit 1,000 g) · Current = 580 mA · Speed = 60%</span>
+          </div>
+          <span class="action-tag">Trigger Overload</span>
+        </button>
+
+        <button class="err-btn vibration" onclick="injectFault('vibration')">
+          <div>
+            <span class="title">2. Excessive Vibration (Bearing / Roller Defect)</span>
+            <span class="desc">Vibration = 0.285 g RMS (limit 0.08 g) · Normal Load = 480 g</span>
+          </div>
+          <span class="action-tag">Trigger Vibration</span>
+        </button>
+
+        <button class="err-btn overheat" onclick="injectFault('overheat')">
+          <div>
+            <span class="title">3. Motor / Roller Over-temperature</span>
+            <span class="desc">Temp = 78.5 °C (limit 65 °C) · Current = 460 mA</span>
+          </div>
+          <span class="action-tag">Trigger Overheat</span>
+        </button>
+
+        <button class="err-btn stall" onclick="injectFault('stall')">
+          <div>
+            <span class="title">4. Motor Stall / Mechanical Jam</span>
+            <span class="desc">Current = 1,950 mA (Stall threshold) · Speed = 0% · Delay = 50,000 µs</span>
+          </div>
+          <span class="action-tag">Trigger Stall</span>
+        </button>
+
+        <button class="err-btn overspeed" onclick="injectFault('overspeed')">
+          <div>
+            <span class="title">5. Belt Overspeed (Drive Loop Anomaly)</span>
+            <span class="desc">Step delay = 1,150 µs (< 1,500 µs limit) · Speed = 95%</span>
+          </div>
+          <span class="action-tag">Trigger Overspeed</span>
+        </button>
+
+        <button class="err-btn combo" onclick="injectFault('multifault')">
+          <div>
+            <span class="title">6. Multi-Fault Catastrophe (Overload + Overheat + Vibration)</span>
+            <span class="desc">Simultaneous Load 1,450 g + Temp 79 °C + Vibration 0.32 g RMS</span>
+          </div>
+          <span class="action-tag">Trigger Multi-Fault</span>
+        </button>
+
+        <button class="err-btn normal" onclick="injectFault('normal')">
+          <div>
+            <span class="title">7. Reset / Clear Faults (Normal Operating Baseline)</span>
+            <span class="desc">Load = 250 g · Temp = 34 °C · Vib = 0.045 g · Current = 360 mA</span>
+          </div>
+          <span class="action-tag" style="background:#047857;">Restore Normal</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Column: Live Detection Feedback -->
+    <div class="card">
+      <h2>
+        <span>AI Inference Feedback</span>
+        <span style="font-size:12px; color:#38bdf8; font-weight:normal;" id="ping-time">Ready</span>
+      </h2>
+
+      <div id="alarm-banner" class="banner-alert ok">
+        <span id="banner-icon">●</span>
+        <span id="banner-text">No manual error active. System operating within normal parameters.</span>
+      </div>
+
+      <div class="status-box" id="log-output">
+        [SYSTEM] Diagnostic console connected to dashboard_v2 backend.<br>
+        [MODEL] Model loaded: Random Forest (rf_noisy_pipeline.joblib)<br>
+        [INFO] Click any error button on the left to prefill telemetry and test model response.
+      </div>
+
+      <div class="readings-grid">
+        <div class="reading-chip">
+          <div class="k">Injected Load</div>
+          <div class="v" id="r-load">250 g</div>
+        </div>
+        <div class="reading-chip">
+          <div class="k">Injected Current</div>
+          <div class="v" id="r-current">360 mA</div>
+        </div>
+        <div class="reading-chip">
+          <div class="k">Injected Temperature</div>
+          <div class="v" id="r-temp">34.0 °C</div>
+        </div>
+        <div class="reading-chip">
+          <div class="k">Injected Vibration</div>
+          <div class="v" id="r-vib">0.045 g</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function injectFault(faultType) {
+      const log = document.getElementById("log-output");
+      const banner = document.getElementById("alarm-banner");
+      const bannerText = document.getElementById("banner-text");
+      const ping = document.getElementById("ping-time");
+
+      log.innerHTML += `<br><span style="color:#f59e0b;">---> [INJECTING] Sending '${faultType}' anomaly to /api/manual/inject...</span>`;
+      log.scrollTop = log.scrollHeight;
+
+      try {
+        const res = await fetch("/api/manual/inject", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fault: faultType })
+        });
+        const data = await res.json();
+        const tNow = new Date().toLocaleTimeString();
+        ping.textContent = `Last injection: ${tNow}`;
+
+        // Update readings display
+        if (data.last_readings) {
+          document.getElementById("r-load").textContent = `${data.last_readings.load_g.toFixed(0)} g`;
+          document.getElementById("r-current").textContent = `${data.last_readings.current_ma.toFixed(0)} mA`;
+          document.getElementById("r-temp").textContent = `${data.last_readings.temp_c.toFixed(1)} °C`;
+          document.getElementById("r-vib").textContent = `${data.last_readings.vib_rms_g.toFixed(3)} g`;
+        }
+
+        // Display model outcome
+        if (data.detected_faults && data.detected_faults.length > 0) {
+          banner.className = "banner-alert alarm";
+          const codes = data.detected_faults.map(f => f.code).join(", ");
+          bannerText.textContent = `ALERT: Model detected active fault(s): ${codes} (Mode: ${data.controller_mode})`;
+
+          let tags = data.detected_faults.map(f =>
+            `<span class="fault-tag ${f.severity >= 2 ? 'tag-crit' : 'tag-warn'}">${f.code}</span> ${f.message}`
+          ).join("<br>");
+
+          log.innerHTML += `<br><span style="color:#ef4444; font-weight:bold;">[DETECTION] rf_noisy model triggered ${data.detected_faults.length} fault(s):</span><br>${tags}`;
+        } else {
+          banner.className = "banner-alert ok";
+          bannerText.textContent = "NORMAL: rf_noisy model evaluated all 5 fault tasks as negative (clean).";
+          log.innerHTML += `<br><span style="color:#10b981;">[DETECTION] Model evaluated sample: NORMAL. (Mode: ${data.controller_mode})</span>`;
+        }
+        log.scrollTop = log.scrollHeight;
+
+      } catch (err) {
+        log.innerHTML += `<br><span style="color:#dc2626;">[ERROR] Failed to inject fault: ${err.message}</span>`;
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+  </script>
+</body>
+</html>

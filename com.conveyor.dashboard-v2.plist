@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.conveyor.dashboard-v2</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/udoyhasan/Documents/case-study/codes/.venv/bin/uvicorn</string>
+        <string>server:app</string>
+        <string>--app-dir</string>
+        <string>/Users/udoyhasan/Documents/case-study/codes/dashboard_v2</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/udoyhasan/Documents/case-study/codes/dashboard_v2</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MPLCONFIGDIR</key>
+        <string>/tmp/matplotlib_dashboard_v2</string>
+        <key>PATH</key>
+        <string>/Users/udoyhasan/Documents/case-study/codes/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/conveyor_dashboard_v2.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/conveyor_dashboard_v2_err.log</string>
+</dict>
+</plist>

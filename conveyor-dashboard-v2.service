@@ -1,0 +1,19 @@
+[Unit]
+Description=Conveyor Line Dashboard V2 Service (Random Forest rf_noisy ML)
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/conveyor/codes/dashboard_v2
+Environment="PATH=/home/pi/conveyor/.venv/bin:/usr/local/bin:/usr/bin"
+Environment="MPLCONFIGDIR=/tmp/matplotlib_dashboard_v2"
+ExecStart=/home/pi/conveyor/.venv/bin/uvicorn server:app --app-dir /home/pi/conveyor/codes/dashboard_v2 --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/conveyor_dashboard_v2.log
+StandardError=append:/var/log/conveyor_dashboard_v2_err.log
+
+[Install]
+WantedBy=multi-user.target
