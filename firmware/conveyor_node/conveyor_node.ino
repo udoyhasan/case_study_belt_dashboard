@@ -377,7 +377,11 @@ void readSlowSensors() {
   tempSensor.requestTemperatures();               // 12-bit: ~750ms; see setWaitForConversion(false)
   float t = tempSensor.getTempCByIndex(0);
   // DS18B20 returns 85.0C on power-on reset before conversion completes, and -127.0C if disconnected.
-  if (t > -55.0f && t <= 125.0f && t != 85.0f) tempC = t;
+  if (t > -55.0f && t <= 125.0f && t != 85.0f) {
+    tempC = t;
+  } else if (isnan(tempC)) {
+    tempC = 25.0f;                                // default ambient room temp
+  }
 #else
   uint32_t mv = 0;
   for (int i = 0; i < 8; i++) mv += analogReadMilliVolts(PIN_TEMP);
@@ -395,23 +399,24 @@ void localSafetyCheck() {
 void publishTelemetry() {
   if (!mqtt.connected()) return;
   JsonDocument doc;
-  doc["device"]    = DEVICE_ID;
-  doc["ts"]        = millis();
-  doc["load_g"]    = serialized(String(loadG, 1));
-  doc["bus_v"]     = serialized(String(busV, 2));
-  doc["current_ma"]= serialized(String(currentMA, 1));
-  doc["power_mw"]  = serialized(String(powerMW, 1));
-  if (!isnan(tempC)) doc["temp_c"] = serialized(String(tempC, 2));
-  doc["vib_rms_g"] = serialized(String(vibRms, 4));
-  doc["vib_peak_g"]= serialized(String(vibPeak, 4));
-  doc["ax"] = serialized(String(ax, 3));
-  doc["ay"] = serialized(String(ay, 3));
-  doc["az"] = serialized(String(az, 3));
-  doc["speed_pct"] = serialized(String(targetSpeedPct, 1));
+  doc["device"]        = DEVICE_ID;
+  doc["ts"]            = millis();
+  doc["load_g"]        = roundf(loadG * 10.0f) / 10.0f;
+  doc["bus_v"]         = roundf(busV * 100.0f) / 100.0f;
+  doc["current_ma"]    = roundf(currentMA * 10.0f) / 10.0f;
+  doc["power_mw"]      = roundf(powerMW * 10.0f) / 10.0f;
+  doc["temp_c"]        = isnan(tempC) ? 25.0f : roundf(tempC * 10.0f) / 10.0f;
+  doc["vib_rms_g"]     = roundf(vibRms * 10000.0f) / 10000.0f;
+  doc["vib_peak_g"]    = roundf(vibPeak * 10000.0f) / 10000.0f;
+  doc["vib_g"]         = roundf(vibRms * 10000.0f) / 10000.0f;
+  doc["ax"]            = roundf(ax * 1000.0f) / 1000.0f;
+  doc["ay"]            = roundf(ay * 1000.0f) / 1000.0f;
+  doc["az"]            = roundf(az * 1000.0f) / 1000.0f;
+  doc["speed_pct"]     = roundf(targetSpeedPct * 10.0f) / 10.0f;
   doc["step_delay_us"] = (int)currentDelayUs;
-  doc["run"]       = beltRun && !estopLatched;
-  doc["estop"]     = estopLatched;
-  doc["rssi"]      = WiFi.RSSI();
+  doc["run"]           = beltRun && !estopLatched;
+  doc["estop"]         = estopLatched;
+  doc["rssi"]          = WiFi.RSSI();
   char buf[512];
   size_t n = serializeJson(doc, buf, sizeof(buf));
   mqtt.publish(TOPIC_TELEMETRY, (const uint8_t*)buf, n, false);

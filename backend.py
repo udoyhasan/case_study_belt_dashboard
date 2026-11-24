@@ -13,7 +13,7 @@ import config as C
 from controller import AdaptiveController
 from detector import RFNoisyDetector, ThresholdDetector
 
-FIELDS = ["load_g", "bus_v", "current_ma", "power_mw", "temp_c", "vib_rms_g", "vib_peak_g",
+FIELDS = ["load_g", "bus_v", "current_ma", "power_mw", "temp_c", "vib_rms_g", "vib_peak_g", "vib_g",
           "ax", "ay", "az", "speed_pct", "step_delay_us", "run", "estop", "rssi"]
 
 
@@ -92,6 +92,7 @@ class Backend:
                 self._handle_telemetry(json.loads(msg.payload))
         except Exception as e:  # noqa - never kill the network thread
             self.add_log("error", f"Bad message on {msg.topic}: {e}")
+            print(f"[MQTT ERROR] Bad message on {msg.topic}: {e} (payload: {msg.payload[:100]!r})")
 
     def _handle_event(self, ev):
         t, d = ev.get("type"), ev.get("detail", "")
@@ -109,6 +110,20 @@ class Backend:
         for k in FIELDS:
             v = d.get(k)
             row[k] = (bool(v) if k in ("run", "estop") else (float(v) if v is not None else None))
+
+        # Ensure essential telemetry data bits have valid non-null defaults
+        if row.get("vib_g") is None:
+            row["vib_g"] = row.get("vib_rms_g") if row.get("vib_rms_g") is not None else 0.05
+        if row.get("vib_rms_g") is None:
+            row["vib_rms_g"] = row.get("vib_g", 0.05)
+        if row.get("temp_c") is None:
+            row["temp_c"] = 25.0
+        if row.get("load_g") is None:
+            row["load_g"] = 0.0
+        if row.get("current_ma") is None:
+            row["current_ma"] = 0.0
+        if row.get("bus_v") is None:
+            row["bus_v"] = 12.0
         with self.lock:
             self.last_rx = now
             self.rx_count += 1
