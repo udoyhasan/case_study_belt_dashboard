@@ -4,13 +4,18 @@ import json
 import time
 from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from plot_style import apply_style, C_MAIN, C_ALT, C_FAULT, C_MUTED
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from plot_style import apply_style, C_MAIN, C_ALT, C_FAULT, C_MUTED
+except ImportError:
+    matplotlib = None
+    plt = None
+    apply_style = None
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"

@@ -1,5 +1,8 @@
 """Visual style and color palette for all ML_V2 figures (7-model benchmark)."""
-import matplotlib as mpl
+try:
+    import matplotlib as mpl
+except ImportError:
+    mpl = None
 
 # Distinct colors for the 7 models
 C_LOGREG = "#7c3aed"    # Purple

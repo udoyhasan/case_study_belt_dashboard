@@ -4,7 +4,14 @@ import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
-from generator import FAULTS, MODES, SENSORS, WINDOW, vib_limit
+# Domain constants
+SENSORS = ["load_g", "current_ma", "temp_c", "vib_g", "step_delay_us"]
+WINDOW = 5
+FAULTS = ["overload", "overspeed", "excess_vibration", "overheating", "stall"]
+MODES = ["TURNING", "HOLDING", "DISCHARGED"]
+
+def vib_limit(load_g):
+    return 0.06 + 0.02 * np.clip(load_g, 0, None) / 1000.0
 
 VALID_RANGE = {
     "load_g": (-100.0, 5000.0),
