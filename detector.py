@@ -145,13 +145,13 @@ class RFNoisyDetector(BaseDetector):
 
         # 1. Overload
         if pred.get("overload", 0) == 1:
-            sev = CRIT if load_val >= 3500 else WARN
+            sev = CRIT if load_val >= 1200 else WARN
             faults.append(Fault(
                 code="OVERLOAD",
                 severity=sev,
                 value=load_val,
                 limit=1000.0,
-                message=f"AI Model (rf_noisy) detected Overload: {load_val:.0f} g (load limit 1000 g)",
+                message=f"AI Model (rf_noisy) detected Belt Overload: {load_val:.0f} g",
             ))
 
         # 2. Excessive Vibration
@@ -173,7 +173,7 @@ class RFNoisyDetector(BaseDetector):
                 severity=sev,
                 value=temp_val,
                 limit=65.0,
-                message=f"AI Model (rf_noisy) detected Over-temperature: {temp_val:.1f} °C (limit 65.0 °C)",
+                message=f"AI Model (rf_noisy) detected Over-temperature: {temp_val:.1f} °C",
             ))
 
         # 4. Motor Stall / Jam
@@ -187,13 +187,13 @@ class RFNoisyDetector(BaseDetector):
             ))
 
         # 5. Overspeed
-        if pred.get("overspeed", 0) == 1:
+        if pred.get("overspeed", 0) == 1 or (0 < delay_val < 1500.0 and bool(latest.get("run"))):
             faults.append(Fault(
                 code="OVERSPEED",
                 severity=WARN,
                 value=delay_val,
                 limit=1500.0,
-                message=f"AI Model (rf_noisy) detected Belt Overspeed: Step delay {delay_val:.0f} µs < 1500 µs",
+                message=f"AI Model (rf_noisy) detected Belt Overspeed: Step delay {delay_val:.0f} µs",
             ))
 
         return sorted(faults, key=lambda f: -f.severity)

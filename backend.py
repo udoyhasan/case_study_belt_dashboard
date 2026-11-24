@@ -44,6 +44,8 @@ class Backend:
         self.log_to_csv = True
         self._csv = None
         self._csv_writer = None
+        self.active_override = None
+        self.active_override_custom = None
 
         try:
             self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"dashboard-{os.getpid()}")
@@ -62,6 +64,7 @@ class Backend:
             self.add_log("error", f"MQTT connect error: {e}")
         self.client.loop_start()
         threading.Thread(target=self._watchdog, daemon=True).start()
+        threading.Thread(target=self._override_ticker, daemon=True).start()
 
     def add_log(self, kind, text):
         with self.lock:
@@ -106,6 +109,10 @@ class Backend:
     # ---------------- core processing ----------------
     def _handle_telemetry(self, d):
         now = time.time()
+        # If active fault override is engaged, replace sensor readings with persistent faulty data
+        if self.active_override is not None:
+            d = self._build_fault_frame(self.active_override, now, self.active_override_custom)
+
         row = {"t": now}
         for k in FIELDS:
             v = d.get(k)
@@ -224,88 +231,106 @@ class Backend:
 
     def inject_manual_telemetry(self, fault_type: str, custom_values: dict = None) -> dict:
         """Injects simulated faulty or normal telemetry to trigger and test rf_noisy detection."""
+    def _override_ticker(self):
+        """Continuously streams realistic telemetry at 5 Hz while override is active if no external MQTT is arriving."""
+        while True:
+            time.sleep(0.2)
+            if self.active_override is not None:
+                now = time.time()
+                # If no hardware message arrived in last 250ms, generate next override frame
+                if now - self.last_rx >= 0.2:
+                    frame = self._build_fault_frame(self.active_override, now, self.active_override_custom)
+                    self._handle_telemetry(frame)
+
+    def _build_fault_frame(self, fault_type, now, custom=None):
+        import random
         fault_type = (fault_type or "normal").lower().strip()
-        now = time.time()
 
         presets = {
             "overload": {
-                "load_g": 1450.0,
-                "bus_v": 24.1,
-                "current_ma": 580.0,
-                "power_mw": 13978.0,
-                "temp_c": 38.5,
-                "vib_rms_g": 0.052,
-                "vib_peak_g": 0.12,
-                "speed_pct": 60.0,
+                "load_g": 1450.0 + random.uniform(-4.0, 4.0),
+                "bus_v": 23.8 + random.uniform(-0.1, 0.1),
+                "current_ma": 580.0 + random.uniform(-5.0, 5.0),
+                "power_mw": 13800.0 + random.uniform(-40.0, 40.0),
+                "temp_c": 38.5 + random.uniform(-0.2, 0.2),
+                "vib_rms_g": 0.058 + random.uniform(-0.002, 0.002),
+                "vib_peak_g": 0.12 + random.uniform(-0.005, 0.005),
+                "vib_g": 0.058,
+                "speed_pct": self.cfg.target_speed_pct,
                 "step_delay_us": 1800.0,
                 "run": True,
                 "estop": False,
                 "rssi": -55,
             },
             "vibration": {
-                "load_g": 480.0,
-                "bus_v": 24.0,
-                "current_ma": 420.0,
-                "power_mw": 10080.0,
-                "temp_c": 41.0,
-                "vib_rms_g": 0.285,
-                "vib_peak_g": 0.65,
-                "speed_pct": 60.0,
+                "load_g": 380.0 + random.uniform(-3.0, 3.0),
+                "bus_v": 24.0 + random.uniform(-0.1, 0.1),
+                "current_ma": 390.0 + random.uniform(-4.0, 4.0),
+                "power_mw": 9360.0 + random.uniform(-40.0, 40.0),
+                "temp_c": 36.0 + random.uniform(-0.2, 0.2),
+                "vib_rms_g": 0.285 + random.uniform(-0.008, 0.008),
+                "vib_peak_g": 0.65 + random.uniform(-0.02, 0.02),
+                "vib_g": 0.285,
+                "speed_pct": self.cfg.target_speed_pct,
                 "step_delay_us": 1800.0,
                 "run": True,
                 "estop": False,
                 "rssi": -55,
             },
             "overheat": {
-                "load_g": 400.0,
-                "bus_v": 24.0,
-                "current_ma": 460.0,
-                "power_mw": 11040.0,
-                "temp_c": 78.5,
-                "vib_rms_g": 0.058,
-                "vib_peak_g": 0.14,
-                "speed_pct": 60.0,
+                "load_g": 350.0 + random.uniform(-3.0, 3.0),
+                "bus_v": 23.9 + random.uniform(-0.1, 0.1),
+                "current_ma": 460.0 + random.uniform(-4.0, 4.0),
+                "power_mw": 11000.0 + random.uniform(-50.0, 50.0),
+                "temp_c": 78.5 + random.uniform(-0.3, 0.3),
+                "vib_rms_g": 0.048 + random.uniform(-0.002, 0.002),
+                "vib_peak_g": 0.10 + random.uniform(-0.005, 0.005),
+                "vib_g": 0.048,
+                "speed_pct": self.cfg.target_speed_pct,
                 "step_delay_us": 1800.0,
                 "run": True,
                 "estop": False,
                 "rssi": -55,
             },
             "stall": {
-                "load_g": 850.0,
-                "bus_v": 23.6,
-                "current_ma": 1950.0,
-                "power_mw": 46020.0,
-                "temp_c": 56.0,
-                "vib_rms_g": 0.088,
-                "vib_peak_g": 0.21,
+                "load_g": 350.0 + random.uniform(-3.0, 3.0),
+                "bus_v": 23.4 + random.uniform(-0.1, 0.1),
+                "current_ma": 1950.0 + random.uniform(-10.0, 10.0),
+                "power_mw": 45600.0 + random.uniform(-100.0, 100.0),
+                "temp_c": 58.0 + random.uniform(-0.2, 0.2),
+                "vib_rms_g": 0.045 + random.uniform(-0.002, 0.002),
+                "vib_peak_g": 0.09 + random.uniform(-0.005, 0.005),
+                "vib_g": 0.045,
                 "speed_pct": 0.0,
-                "step_delay_us": 50000.0,
-                "run": False,
+                "step_delay_us": 0.0,
+                "run": True,
                 "estop": False,
                 "rssi": -55,
             },
             "overspeed": {
-                "load_g": 250.0,
-                "bus_v": 24.2,
-                "current_ma": 340.0,
-                "power_mw": 8228.0,
-                "temp_c": 35.0,
-                "vib_rms_g": 0.082,
-                "vib_peak_g": 0.18,
+                "load_g": 250.0 + random.uniform(-3.0, 3.0),
+                "bus_v": 24.1 + random.uniform(-0.1, 0.1),
+                "current_ma": 420.0 + random.uniform(-4.0, 4.0),
+                "power_mw": 10120.0 + random.uniform(-40.0, 40.0),
+                "temp_c": 35.0 + random.uniform(-0.2, 0.2),
+                "vib_rms_g": 0.048 + random.uniform(-0.002, 0.002),
+                "vib_peak_g": 0.10 + random.uniform(-0.005, 0.005),
+                "vib_g": 0.048,
                 "speed_pct": 95.0,
-                "step_delay_us": 1150.0,
+                "step_delay_us": 1200.0,
                 "run": True,
                 "estop": False,
                 "rssi": -55,
             },
             "multifault": {
-                "load_g": 1450.0,
-                "bus_v": 23.5,
-                "current_ma": 1950.0,
-                "power_mw": 45825.0,
-                "temp_c": 79.0,
-                "vib_rms_g": 0.320,
-                "vib_peak_g": 0.75,
+                "load_g": 1450.0 + random.uniform(-5.0, 5.0),
+                "bus_v": 23.2 + random.uniform(-0.1, 0.1),
+                "current_ma": 1950.0 + random.uniform(-10.0, 10.0),
+                "power_mw": 45240.0 + random.uniform(-100.0, 100.0),
+                "temp_c": 79.0 + random.uniform(-0.3, 0.3),
+                "vib_rms_g": 0.320 + random.uniform(-0.01, 0.01),
+                "vib_peak_g": 0.75 + random.uniform(-0.02, 0.02),
+                "vib_g": 0.320,
                 "speed_pct": 60.0,
                 "step_delay_us": 1800.0,
                 "run": True,
@@ -313,52 +338,57 @@ class Backend:
                 "rssi": -55,
             },
             "normal": {
-                "load_g": 250.0,
-                "bus_v": 24.0,
-                "current_ma": 360.0,
-                "power_mw": 8640.0,
-                "temp_c": 34.0,
-                "vib_rms_g": 0.045,
-                "vib_peak_g": 0.09,
-                "speed_pct": 60.0,
+                "load_g": 250.0 + random.uniform(-3.0, 3.0),
+                "bus_v": 24.0 + random.uniform(-0.1, 0.1),
+                "current_ma": 360.0 + random.uniform(-4.0, 4.0),
+                "power_mw": 8640.0 + random.uniform(-30.0, 30.0),
+                "temp_c": 32.0 + random.uniform(-0.2, 0.2),
+                "vib_rms_g": 0.045 + random.uniform(-0.002, 0.002),
+                "vib_peak_g": 0.09 + random.uniform(-0.005, 0.005),
+                "vib_g": 0.045,
+                "speed_pct": self.cfg.target_speed_pct,
                 "step_delay_us": 1800.0,
-                "run": True,
+                "run": self.ctrl.operator_run,
                 "estop": False,
                 "rssi": -55,
             },
         }
 
         template = presets.get(fault_type, presets["normal"]).copy()
-        if custom_values:
-            template.update(custom_values)
+        if custom:
+            template.update(custom)
+        template["t"] = now
+        template["device"] = "conveyor-node-01"
+        return template
 
-        # Inject 5 samples to fill the model's 5-window buffer
+    def inject_manual_telemetry(self, fault_type: str, custom_values: dict = None):
+        """Activates persistent real faulty sensor data across all sensors until 'normal' or 'local' is clicked."""
+        now = time.time()
+        fault_type = (fault_type or "normal").lower().strip()
+
+        if fault_type in ("normal", "local", "clear", "reset"):
+            self.active_override = None
+            self.active_override_custom = None
+            with self.lock:
+                for i in range(5):
+                    frame = self._build_fault_frame("normal", now - (4 - i) * 0.2)
+                    self._handle_telemetry(frame)
+            return {"status": "success", "mode": "normal", "active_override": None}
+
+        # Engage persistent faulty data override
+        self.active_override = fault_type
+        self.active_override_custom = custom_values
+
         with self.lock:
             for i in range(5):
-                t_sample = now - (4 - i) * 0.2
-                row = dict(template)
-                row["t"] = t_sample
-                # Subtle jitter on history to make realistic time-series
-                if fault_type != "normal":
-                    row["load_g"] += (i - 2) * 4.0
-                    row["current_ma"] += (i - 2) * 2.0
-                self._handle_telemetry(row)
+                frame = self._build_fault_frame(fault_type, now - (4 - i) * 0.2, custom_values)
+                self._handle_telemetry(frame)
 
-            detected = [{"code": f.code, "name": f.name, "severity": f.severity, "message": f.message} for f in self.faults]
-            self.add_log("error" if fault_type != "normal" else "info",
-                         f"[MANUAL INJECT] Injected '{fault_type}'. Model detected: {', '.join(f.code for f in self.faults) or 'NORMAL'}")
-
-        # Also publish message to MQTT broker if connected
-        try:
-            self.client.publish(C.TOPIC_TELEMETRY, json.dumps(template), qos=1)
-        except Exception:
-            pass
-
+        detected = [{"code": f.code, "name": f.name, "severity": f.severity, "message": f.message} for f in self.faults]
         return {
             "status": "success",
-            "fault_injected": fault_type,
+            "active_override": fault_type,
             "detected_faults": detected,
-            "last_readings": template,
             "model_name": getattr(self.detector, "model_name", "Random Forest (rf_noisy)"),
             "controller_mode": self.ctrl.mode,
         }

@@ -145,11 +145,11 @@
     $("v-power").textContent = fmt((last.power_mw || 0) / 1000, 2);
     $("s-power").textContent = `${fmt(last.bus_v, 2)} V supply`;
     $("v-temp").textContent = fmt(last.temp_c, 1);
-    $("s-temp").textContent = `Warning at ${fmt(L.temp_warn)} °C`;
+    $("s-temp").textContent = "Thermal baseline";
     $("v-load").textContent = fmt(last.load_g);
-    $("s-load").textContent = `Warning at ${fmt(L.load_warn)} g`;
+    $("s-load").textContent = "Rated capacity: 1,000 g";
     $("v-vib").textContent = fmt(last.vib_rms_g, 3);
-    $("s-vib").textContent = `Limit ${fmt(vibLimit(L, last.load_g), 3)} g at this load`;
+    $("s-vib").textContent = "Dynamic baseline";
 
     // part highlighting
     const sev = {};
@@ -196,13 +196,13 @@
   // ------------------------------------------------------------------ trends
   const CHARTS = [
     { id: "load", label: "Load on belt", unit: "g", key: "load_g", d: 0,
-      lines: (L) => [["c-warn", L.load_warn], ["c-crit", L.load_crit]] },
+      note: "Continuous load tracking (rated: 1,000 g)" },
     { id: "current", label: "Motor current", unit: "mA", key: "current_ma", d: 0, band: true,
       note: "Shaded band is normal for the load" },
     { id: "vib", label: "Frame vibration", unit: "g", key: "vib_rms_g", d: 3, limit: true,
-      note: "Dashed line is the limit for the load" },
+      note: "Dashed line is dynamic vibration baseline" },
     { id: "temp", label: "Motor temperature", unit: "°C", key: "temp_c", d: 1,
-      lines: (L) => [["c-warn", L.temp_warn], ["c-crit", L.temp_crit]] },
+      note: "Motor thermal baseline" },
     { id: "speed", label: "Belt speed", unit: "%", key: "cmd_speed", d: 0, fixed: [0, 100],
       note: "Solid is commanded, dashed is what the ESP32 reports" },
   ];
@@ -283,8 +283,8 @@
         lo -= pad; hi += pad;
         if (c.key !== "temp_c" && lo < 0) lo = 0;
       }
-      const X = (t) => ((t - t0) / windowS) * pw;
-      const Y = (v) => ph - ((v - lo) / (hi - lo)) * (ph - 4) - 2;
+      const X = (t) => Math.max(0, Math.min(pw, ((t - t0) / windowS) * pw));
+      const Y = (v) => Math.max(2, Math.min(ph - 2, ph - ((v - lo) / (hi - lo || 1)) * (ph - 4) - 2));
 
       // grid + axis labels
       for (const f of [0, 0.5, 1]) {

@@ -17,9 +17,9 @@ STALE_AFTER_S = 3.0         # no telemetry for this long = data link lost
 
 @dataclass
 class Thresholds:
-    # --- load ---
-    load_warn_g: float = 3000.0
-    load_crit_g: float = 4500.0
+    # --- load (rated 1 kg capacity) ---
+    load_warn_g: float = 1000.0
+    load_crit_g: float = 1200.0
     # --- load-aware current model: expected_mA = idle + per_kg * load_kg ---
     current_idle_ma: float = 300.0
     current_per_kg_ma: float = 60.0
